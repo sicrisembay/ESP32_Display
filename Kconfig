@@ -1,0 +1,71 @@
+config ESP32_DISPLAY
+    bool "Enable Display"
+    default n
+
+menu "Display Interface Configuration"
+    depends on ESP32_DISPLAY
+    choice
+        prompt "Display SPI Inteface"
+        default DISPLAY_3WIRE_SPI
+        config DISPLAY_3WIRE_SPI
+            bool "3-wire SPI"
+        config DISPLAY_4WIRE_SPI
+            bool "4-wire SPI" 
+    endchoice
+
+    config DISPLAY_SPI_CLK_FREQ
+        int "SPI Clock Frequency, Hz"
+        default 60000000
+    config DISPLAY_SPI_CLK_IO_PIN
+        int "LCD SPI Clock IO pin"
+        default 19
+    config DISPLAY_SPI_SDI_IO_PIN
+        int "LCD SPI SDI IO pin"
+        default -1
+    config DISPLAY_SPI_SDO_IO_PIN
+        int "LCD SPI SDO IO pin"
+        default 23
+    config DISPLAY_SPI_CS_IO_PIN
+        int "LCD SPI CS IO pin"
+        default 22
+    config DISPLAY_RESET_IO_PIN
+        int "LCD Reset IO pin"
+        default 18
+    config DISPLAY_BACKLIGHT_IO_PIN
+        int "LCD Backlight IO pin"
+        default 26
+endmenu # "Display Interface Configuration"
+
+config DISPLAY_H_RES
+    depends on ESP32_DISPLAY
+    int "Horizontal Resolution in pixel"
+    default 480
+
+config DISPLAY_V_RES
+    depends on ESP32_DISPLAY
+    int "Vertical Resolution in pixel"
+    default 320
+
+config DISPLAY_PARALLEL_LINE_COUNT
+    depends on ESP32_DISPLAY
+    int "Number of Horizontal lines the buffer can hold"
+    default 16
+
+choice
+    prompt "Display Color"
+    default DISPLAY_COLOR_RGB565
+    config DISPLAY_COLOR_RGB565
+        bool "RGB565"
+    config DISPLAY_COLOR_ARGB8888
+        bool "ARGB8888"
+endchoice
+
+choice DISPLAY_DRIVER_IC
+    depends on ESP32_DISPLAY
+    prompt "Display Driver IC"
+    default DISPLAY_ILI9488
+    config DISPLAY_ILI9488
+        bool "ILI9488"
+endchoice
+
+source "$(ESP32_DISPLAY_PATH)/ili9488/Kconfig"

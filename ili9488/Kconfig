@@ -1,0 +1,4 @@
+menu "ILI9488 Configuration"
+    depends on DISPLAY_ILI9488
+    
+endmenu # "ILI9488 Configuration"
