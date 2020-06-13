@@ -13,6 +13,10 @@ menu "Display Interface Configuration"
             bool "4-wire SPI" 
     endchoice
 
+    config DISPLAY_SPI_HOST_DEV
+        int "ESP32 SPI Host (1:HSPI, 2:VSPI)"
+        range 1 2
+        default 1
     config DISPLAY_SPI_CLK_FREQ
         int "SPI Clock Frequency, Hz"
         default 60000000
