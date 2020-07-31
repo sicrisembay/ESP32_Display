@@ -6,7 +6,7 @@ menu "Display Interface Configuration"
     depends on ESP32_DISPLAY
     choice
         prompt "Display SPI Inteface"
-        default DISPLAY_3WIRE_SPI
+        default DISPLAY_4WIRE_SPI
         config DISPLAY_3WIRE_SPI
             bool "3-wire SPI"
         config DISPLAY_4WIRE_SPI
@@ -19,19 +19,24 @@ menu "Display Interface Configuration"
         default 1
     config DISPLAY_SPI_CLK_FREQ
         int "SPI Clock Frequency, Hz"
-        default 60000000
+        default 10000000
     config DISPLAY_SPI_CLK_IO_PIN
         int "LCD SPI Clock IO pin"
         default 19
     config DISPLAY_SPI_SDI_IO_PIN
         int "LCD SPI SDI IO pin"
-        default -1
+        default -1 if DISPLAY_3WIRE_SPI
+        default 18 if DISPLAY_4WIRE_SPI
     config DISPLAY_SPI_SDO_IO_PIN
         int "LCD SPI SDO IO pin"
         default 23
     config DISPLAY_SPI_CS_IO_PIN
         int "LCD SPI CS IO pin"
         default 22
+    config DISPLAY_DCX_IO_PIN
+        depends on DISPLAY_4WIRE_SPI
+        int "LCD Data/Command IO pin"
+        default 21
     config DISPLAY_RESET_IO_PIN
         int "LCD Reset IO pin"
         default 18
@@ -71,6 +76,9 @@ choice DISPLAY_DRIVER_IC
     default DISPLAY_ILI9488
     config DISPLAY_ILI9488
         bool "ILI9488"
+    config DISPLAY_ST7796S
+        bool "ST7796S"
 endchoice
 
 source "$(ESP32_DISPLAY_PATH)/ili9488/Kconfig"
+source "$(ESP32_DISPLAY_PATH)/st7796s/Kconfig"

@@ -4,16 +4,22 @@
 
 static const char *TAG = "test_main";
 
-#define TEST_BUF_SIZE  (CONFIG_DISPLAY_H_RES * CONFIG_DISPLAY_PARALLEL_LINE_COUNT)
-static rgb_t testColorBuf[TEST_BUF_SIZE];
+#define N_PIXEL_IN_BUFF  (CONFIG_DISPLAY_H_RES * CONFIG_DISPLAY_PARALLEL_LINE_COUNT)
+static uint8_t testColorBuf[N_PIXEL_IN_BUFF * 2];
 
 static void setBufColor(rgb_t color)
 {
     int i = 0;
-    for(i = 0; i < TEST_BUF_SIZE; i++) {
-        testColorBuf[i].blue = color.blue;
-        testColorBuf[i].green = color.green;
-        testColorBuf[i].red = color.red;
+    for(i = 0; i < (N_PIXEL_IN_BUFF * 2); i = i + 2) {
+#if 0
+        testColorBuf[i] = (uint8_t)(((color.red & 0x1F) << 3) |
+                                ((color.green & 0x3F) >> 3));
+        testColorBuf[i+1] = (uint8_t)((((color.green & 0x3F) << 5) |
+                                (color.blue & 0x1F)));
+#else
+        testColorBuf[i] = (uint8_t)(color.raw >> 8);
+        testColorBuf[i+1] = (uint8_t)(color.raw & 0xFF);
+#endif
     }
 }
 
@@ -22,10 +28,12 @@ void app_main()
     esp_err_t ret = ESP_OK;
     uint32_t i = 0;
     rgb_t color;
-    ESP_LOGI(TAG, "*** ILI9488 Test Start ***");
+
+    ESP_LOGI(TAG, "*** ST7796S Test Start ***");
     ret = display_init();
     ESP_ERROR_CHECK(ret);
     display_backlight_set(true);
+
     for(i = 0; i < (CONFIG_DISPLAY_V_RES / CONFIG_DISPLAY_PARALLEL_LINE_COUNT); i++) {
         switch(i%5) {
             case 0:
@@ -64,7 +72,8 @@ void app_main()
         setBufColor(color);
         display_write_pixel(0, (CONFIG_DISPLAY_H_RES - 1),
                 (i * CONFIG_DISPLAY_PARALLEL_LINE_COUNT), 
-                (((i + 1) * CONFIG_DISPLAY_PARALLEL_LINE_COUNT) - 1), (uint8_t *)testColorBuf, TEST_BUF_SIZE);
+                (((i + 1) * CONFIG_DISPLAY_PARALLEL_LINE_COUNT) - 1), testColorBuf, N_PIXEL_IN_BUFF);
     }
-    ESP_LOGI(TAG, "*** ILI9488 Test End ***");
+
+    ESP_LOGI(TAG, "*** ST7796S Test End ***");
 }
