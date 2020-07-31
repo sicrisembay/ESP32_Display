@@ -4,6 +4,7 @@
 #include "sdkconfig.h"
 #if defined(CONFIG_ESP32_DISPLAY)
 
+#include "stdbool.h"
 #include "esp_err.h"
 
 typedef struct {
@@ -30,7 +31,7 @@ typedef struct {
 } rgb_t;
 
 esp_err_t display_init(void);
-esp_err_t display_write_pixel(uint16_t xs, uint16_t xe, uint16_t ys, uint16_t ye, rgb_t *pBuf, uint32_t nPixel);
+esp_err_t display_write_pixel(uint16_t xs, uint16_t xe, uint16_t ys, uint16_t ye, uint8_t *pBuf, uint32_t nPixel);
 esp_err_t display_backlight_set(bool state);
 #endif /* CONFIG_ESP32_DISPLAY */
 

@@ -1,9 +1,15 @@
-#include "esp_log.h"
 #include "display_spi_interface.h"
 #include "driver/spi_master.h"
+#include "driver/gpio.h"
 #include "string.h"
+#include "esp_log.h"
 
 #define DMA_CHAN            2
+
+/*
+ * Number of pixels the buffer can hold
+ */
+#define PIXEL_IN_BUF        (CONFIG_DISPLAY_PARALLEL_LINE_COUNT * CONFIG_DISPLAY_H_RES)
 
 #if defined(CONFIG_DISPLAY_3WIRE_SPI)
 /*
@@ -20,20 +26,24 @@
 #define PIXEL_IN_MIN_BUF        (8)
 #define MAX_CMD_PARAM_COUNT     (15)
 #define CMD_BUF_SIZE            ((uint32_t)((MAX_CMD_PARAM_COUNT * BITS_PER_BYTE)/8) + 1)
-
-#elif defined(CONFIG_DISPLAY_4WIRE_SPI)
-#else
-#error "Invalid SPI Config"
-#endif
-/*
- * Number of pixels the buffer can hold
- */
-#define PIXEL_IN_BUF        (CONFIG_DISPLAY_PARALLEL_LINE_COUNT * CONFIG_DISPLAY_H_RES)
-
 /*
  * DMA Buffer size to hold Pixel Buffer
  */
 #define PIXEL_BUFF_SIZE     ((PIXEL_IN_BUF * BUF_MIN_SIZE) / PIXEL_IN_MIN_BUF)
+
+#elif defined(CONFIG_DISPLAY_4WIRE_SPI)
+#define BITS_PER_PIXEL          (16)
+#define MAX_CMD_PARAM_COUNT     (16)
+#define CMD_BUF_SIZE            (uint32_t)(MAX_CMD_PARAM_COUNT)
+/*
+ * DMA Buffer size to hold Pixel Buffer
+ * Assumption: 16-bit/pixel (5Red-6Green-5Blue)
+ */
+#define PIXEL_BUFF_SIZE     (PIXEL_IN_BUF * 2)
+#else
+#error "Invalid SPI Config"
+#endif
+
 
 typedef struct {
     union {
@@ -44,11 +54,11 @@ typedef struct {
 
 static const char * TAG = "display_spi_interface";
 static spi_device_handle_t spi_device_handle;
-DMA_ATTR static uint8_t pixelDmaBuf[PIXEL_BUFF_SIZE];
-DMA_ATTR static uint8_t cmdDmaBuf[CMD_BUF_SIZE];
 static bool bInit = false;
 
 #if defined(CONFIG_DISPLAY_3WIRE_SPI)
+DMA_ATTR static uint8_t pixelDmaBuf[PIXEL_BUFF_SIZE];
+DMA_ATTR static uint8_t cmdDmaBuf[CMD_BUF_SIZE];
 /*
  * Convert from rgb_t to 27-bit
  */
@@ -111,7 +121,7 @@ static esp_err_t conv_buf_rgb_to_27b(rgb_t *pBuf_rgb, uint8_t *pBuf27, uint32_t 
 /*
  * Convert from 8-bit to 9-bit (D/C set + byte)
  */
-static esp_err_t conv_buf_8b_to_9b(uint8_t *pBuf8, uint8_t *pBuf9, uint32_t nBuf8, uint32_t nBuf9)
+static esp_err_t conv_buf_8b_to_9b(const uint8_t *pBuf8, uint8_t *pBuf9, uint32_t nBuf8, uint32_t nBuf9)
 {
     uint32_t i = 0;
     uint8_t dataField[2];
@@ -151,7 +161,17 @@ static esp_err_t conv_buf_8b_to_9b(uint8_t *pBuf8, uint8_t *pBuf9, uint32_t nBuf
 
     return ESP_OK;
 }
+
+#elif (defined(CONFIG_DISPLAY_4WIRE_SPI) && (CONFIG_DISPLAY_DCX_IO_PIN != -1))
+//This function is called (in irq context!) just before a transmission starts. It will
+//set the D/C line to the value indicated in the user field.
+void lcd_spi_pre_transfer_callback(spi_transaction_t *t)
+{
+    int dc=(int)t->user;
+    gpio_set_level(CONFIG_DISPLAY_DCX_IO_PIN, dc);
+}
 #endif /* defined(CONFIG_DISPLAY_3WIRE_SPI) */
+
 
 esp_err_t display_interface_init(void)
 {
@@ -172,9 +192,24 @@ esp_err_t display_interface_init(void)
 #if defined(CONFIG_DISPLAY_3WIRE_SPI)
         .flags = SPI_DEVICE_3WIRE | SPI_DEVICE_HALFDUPLEX,
 #elif defined(CONFIG_DISPLAY_4WIRE_SPI)
+        .flags = SPI_DEVICE_HALFDUPLEX,
+        .pre_cb = lcd_spi_pre_transfer_callback,
 #endif
         .queue_size = 7
     };
+
+#if defined(CONFIG_DISPLAY_4WIRE_SPI)
+    gpio_config_t io_config;
+#if (defined(CONFIG_DISPLAY_DCX_IO_PIN) && (CONFIG_DISPLAY_DCX_IO_PIN != -1))
+    io_config.intr_type = GPIO_PIN_INTR_DISABLE;
+    io_config.mode = GPIO_MODE_OUTPUT;
+    io_config.pin_bit_mask = (1ULL << CONFIG_DISPLAY_DCX_IO_PIN);
+    io_config.pull_down_en = 0;
+    io_config.pull_up_en = 0;
+    ret = gpio_config(&io_config);
+    ESP_ERROR_CHECK(ret);
+#endif
+#endif /* defined(CONFIG_DISPLAY_4WIRE_SPI) */
 
     /*
      * Initialize SPI bus
@@ -188,7 +223,7 @@ esp_err_t display_interface_init(void)
     return ESP_OK;
 }
 
-esp_err_t display_interface_write_px(rgb_t *pBuf, uint32_t nPixel)
+esp_err_t display_interface_write_px(const uint8_t *pBuf, const uint32_t nPixel)
 {
     esp_err_t ret = ESP_OK;
     static spi_transaction_t t;
@@ -199,7 +234,7 @@ esp_err_t display_interface_write_px(rgb_t *pBuf, uint32_t nPixel)
         return ESP_OK;
     }
 
-    if((rgb_t *)0 == pBuf) {
+    if((uint8_t *)0 == pBuf) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -213,7 +248,7 @@ esp_err_t display_interface_write_px(rgb_t *pBuf, uint32_t nPixel)
 
 #if defined(CONFIG_DISPLAY_3WIRE_SPI)
     /* Translate to 27bit/pixel SPI Format */
-    ret = conv_buf_rgb_to_27b(pBuf, pixelDmaBuf, nPixel, PIXEL_BUFF_SIZE);
+    ret = conv_buf_rgb_to_27b((rgb_t *)pBuf, pixelDmaBuf, nPixel, PIXEL_BUFF_SIZE);
     if(ESP_OK != ret) {
         ESP_LOGE(TAG, "%s:%d:Err%d\n", __FUNCTION__, __LINE__, ret);
         return(ret);
@@ -224,7 +259,9 @@ esp_err_t display_interface_write_px(rgb_t *pBuf, uint32_t nPixel)
     t.length = nPixel * BITS_PER_PIXEL;
     t.tx_buffer = pixelDmaBuf;
 #elif defined(CONFIG_DISPLAY_4WIRE_SPI)
-    /// TODO
+    t.length = nPixel * BITS_PER_PIXEL;
+    t.tx_buffer = pBuf;
+    t.user = (void*)1;
 #endif
 
     ret = spi_device_queue_trans(spi_device_handle, &t, portMAX_DELAY);
@@ -240,8 +277,11 @@ esp_err_t display_interface_write_px(rgb_t *pBuf, uint32_t nPixel)
     return ESP_OK;
 }
 
-esp_err_t display_interface_write_command(uint8_t cmd, uint8_t *pBuf, uint32_t nBuf)
+esp_err_t display_interface_write_command(const uint8_t cmd, const uint8_t *pBuf, const uint32_t nBuf)
 {
+    ESP_LOGD(TAG, "%s: cmd=0x%02X, nBuf=%d", __FUNCTION__, cmd, nBuf);
+#if defined(CONFIG_DISPLAY_3WIRE_SPI)
+    // 3-Wire SPI specific, start-->
     static spi_transaction_ext_t t_cmd;
     spi_transaction_t * pTrans = &(t_cmd.base);
     esp_err_t ret = ESP_OK;
@@ -256,20 +296,12 @@ esp_err_t display_interface_write_command(uint8_t cmd, uint8_t *pBuf, uint32_t n
     memset(&t_cmd, 0, sizeof(spi_transaction_ext_t));
     t_cmd.base.flags = SPI_TRANS_VARIABLE_CMD;
     t_cmd.base.cmd = 0x00FF & cmd;
-#if defined(CONFIG_DISPLAY_3WIRE_SPI)
     t_cmd.command_bits = 9;
     t_cmd.base.length = nBuf * 9;
-#elif defined(CONFIG_DISPLAY_4WIRE_SPI)
-    t_cmd.command_bits = 8;
-    t_cmd.base.length = nBuf * 8;
-#endif
 
     if(nBuf != 0) {
-#if defined(CONFIG_DISPLAY_3WIRE_SPI)
         ret = conv_buf_8b_to_9b(pBuf, cmdDmaBuf, nBuf, CMD_BUF_SIZE);
         t_cmd.base.tx_buffer = cmdDmaBuf;
-#elif defined(CONFIG_DISPLAY_4WIRE_SPI)
-#endif
         if(ESP_OK != ret) {
             ESP_LOGE(TAG, "%s:%d:Err%d\n", __FUNCTION__, __LINE__, ret);
             return(ret);
@@ -289,6 +321,54 @@ esp_err_t display_interface_write_command(uint8_t cmd, uint8_t *pBuf, uint32_t n
         ESP_LOGE(TAG, "%s:%d:Err%d\n", __FUNCTION__, __LINE__, ret);
         return(ret);
     }
+    // <-- end, 3-Wire SPI specific
+#elif defined(CONFIG_DISPLAY_4WIRE_SPI)
+    // 4-Wire SPI specific, start-->
+    esp_err_t ret = ESP_OK;
+    static spi_transaction_t t[2];
+    spi_transaction_t * pTrans;
+    int i = 0;
+    int transCnt = 0;
 
+    if(((uint8_t *)0 == pBuf) && (nBuf > 0)) {
+        ESP_LOGE(TAG, "%s:%d: ESP_ERR_INVALID_ARG\n", __FUNCTION__, __LINE__);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if(bInit != true) {
+        ESP_LOGE(TAG, "%s:%d: ESP_ERR_INVALID_STATE\n", __FUNCTION__, __LINE__);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    for(i = 0; i < 2; i++) {
+        memset(&t[i], 0, sizeof(spi_transaction_t));
+    }
+
+    t[0].flags = 0;
+    t[0].tx_buffer = &cmd;
+    t[0].length = 8;
+    t[0].user = (void *)0;
+    ret = spi_device_queue_trans(spi_device_handle, &t[0], portMAX_DELAY);
+    assert(ret == ESP_OK);
+    transCnt++;
+
+    if(nBuf > 0) {
+        t[1].flags = 0;
+        t[1].tx_buffer = pBuf;
+        t[1].length = nBuf << 3; // same as nBuf * 8
+        t[1].user = (void *)1;
+        ret = spi_device_queue_trans(spi_device_handle, &t[1], portMAX_DELAY);
+        assert(ret == ESP_OK);
+        transCnt++;
+    }
+
+    /* Wait for transaction to finish */
+    for(i = 0; i < transCnt; i++) {
+        ret = spi_device_get_trans_result(spi_device_handle, &pTrans, portMAX_DELAY);
+        assert(ret == ESP_OK);
+    }
+    // <-- end, 4-Wire SPI specific
+#else
+#error "Invalid Display SPI configuration!"
+#endif
     return ESP_OK;
 }

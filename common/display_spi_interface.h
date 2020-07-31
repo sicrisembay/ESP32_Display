@@ -5,7 +5,7 @@
 #include "../include/display.h"
 
 esp_err_t display_interface_init(void);
-esp_err_t display_interface_write_px(rgb_t *pBuf, uint32_t nPixel);
-esp_err_t display_interface_write_command(uint8_t cmd, uint8_t *pBuf, uint32_t nBuf);
+esp_err_t display_interface_write_px(const uint8_t *pBuf, const uint32_t nPixel);
+esp_err_t display_interface_write_command(const uint8_t cmd, const uint8_t *pBuf, const uint32_t nBuf);
 
 #endif /* DISPLAY_SPI_INTERFACE_H */
