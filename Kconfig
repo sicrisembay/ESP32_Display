@@ -1,6 +1,6 @@
 config ESP32_DISPLAY
     bool "Enable Display"
-    default n
+    default y
 
 menu "Display Interface Configuration"
     depends on ESP32_DISPLAY
@@ -73,7 +73,7 @@ endchoice
 choice DISPLAY_DRIVER_IC
     depends on ESP32_DISPLAY
     prompt "Display Driver IC"
-    default DISPLAY_ILI9488
+    default DISPLAY_ST7796S
     config DISPLAY_ILI9488
         bool "ILI9488"
     config DISPLAY_ST7796S
