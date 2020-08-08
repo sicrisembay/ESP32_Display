@@ -19,7 +19,7 @@ menu "Display Interface Configuration"
         default 1
     config DISPLAY_SPI_CLK_FREQ
         int "SPI Clock Frequency, Hz"
-        default 10000000
+        default 40000000
     config DISPLAY_SPI_CLK_IO_PIN
         int "LCD SPI Clock IO pin"
         default 19
@@ -39,10 +39,10 @@ menu "Display Interface Configuration"
         default 21
     config DISPLAY_RESET_IO_PIN
         int "LCD Reset IO pin"
-        default 18
+        default 0
     config DISPLAY_BACKLIGHT_IO_PIN
         int "LCD Backlight IO pin"
-        default 26
+        default 2
 endmenu # "Display Interface Configuration"
 
 config DISPLAY_H_RES
