@@ -80,5 +80,5 @@ choice DISPLAY_DRIVER_IC
         bool "ST7796S"
 endchoice
 
-source "$(ESP32_DISPLAY_PATH)/ili9488/Kconfig"
-source "$(ESP32_DISPLAY_PATH)/st7796s/Kconfig"
+rsource "ili9488/Kconfig"
+rsource "st7796s/Kconfig"
